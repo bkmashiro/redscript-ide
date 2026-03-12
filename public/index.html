@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RedScript IDE</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #1e1e2e;
+      --surface:  #181825;
+      --border:   #313244;
+      --accent:   #cba6f7;
+      --accent2:  #89b4fa;
+      --green:    #a6e3a1;
+      --red:      #f38ba8;
+      --yellow:   #f9e2af;
+      --text:     #cdd6f4;
+      --subtext:  #6c7086;
+      --bar-h:    48px;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Top bar ── */
+    #topbar {
+      height: var(--bar-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px;
+      flex-shrink: 0;
+    }
+
+    #topbar .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--accent);
+      text-decoration: none;
+    }
+    #topbar .logo svg { width: 22px; height: 22px; }
+
+    #topbar .sep { flex: 1; }
+
+    #example-select {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    #compile-btn {
+      background: var(--accent);
+      color: #11111b;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: opacity .15s;
+    }
+    #compile-btn:hover { opacity: .85; }
+    #compile-btn.loading { opacity: .6; cursor: default; }
+
+    #status-badge {
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--border);
+      color: var(--subtext);
+      min-width: 80px;
+      text-align: center;
+    }
+    #status-badge.ok  { background: #1e3a2f; color: var(--green); }
+    #status-badge.err { background: #3a1e1e; color: var(--red); }
+    #status-badge.warn { background: #3a341e; color: var(--yellow); }
+
+    /* ── Split pane ── */
+    #split {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .pane + .pane { border-left: 2px solid var(--border); }
+
+    .pane-header {
+      height: 32px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--subtext);
+      flex-shrink: 0;
+    }
+    .pane-header span { margin-left: auto; font-weight: 400; }
+
+    .editor-wrap { flex: 1; overflow: hidden; }
+
+    /* ── Output tabs ── */
+    #output-tabs {
+      display: flex;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .tab {
+      padding: 6px 14px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--subtext);
+      border-bottom: 2px solid transparent;
+      transition: color .15s;
+      user-select: none;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent2); border-bottom-color: var(--accent2); }
+
+    /* ── Error panel ── */
+    #error-panel {
+      background: #1a0a0a;
+      border-top: 1px solid #5a2020;
+      padding: 10px 14px;
+      font-size: 12px;
+      font-family: monospace;
+      color: var(--red);
+      white-space: pre-wrap;
+      overflow: auto;
+      max-height: 140px;
+      flex-shrink: 0;
+      display: none;
+    }
+
+    /* ── Stats bar ── */
+    #stats-bar {
+      height: 26px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 16px;
+      font-size: 11px;
+      color: var(--subtext);
+      flex-shrink: 0;
+    }
+    #stats-bar b { color: var(--text); }
+
+    /* ── Spinner ── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 13px; height: 13px;
+      border: 2px solid #11111b;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div id="topbar">
+  <a class="logo" href="https://github.com/bkmashiro/redscript" target="_blank">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="3" width="18" height="18" rx="3"/>
+      <path d="M7 8h6a3 3 0 0 1 0 6H7m0-6v10m6-4 3 4"/>
+    </svg>
+    RedScript IDE
+  </a>
+
+  <select id="example-select">
+    <option value="">— Examples —</option>
+    <option value="counter">Counter</option>
+    <option value="pvp">PVP Timer</option>
+    <option value="shop">Shop</option>
+    <option value="lambda">Lambda</option>
+    <option value="structs">Structs & Enums</option>
+  </select>
+
+  <div class="sep"></div>
+  <span id="status-badge">ready</span>
+
+  <button id="compile-btn">
+    <span class="btn-icon">▶</span>
+    Compile
+  </button>
+</div>
+
+<!-- Split pane -->
+<div id="split">
+
+  <!-- Left: editor -->
+  <div class="pane">
+    <div class="pane-header">
+      redscript
+      <span id="cursor-pos">Ln 1, Col 1</span>
+    </div>
+    <div class="editor-wrap" id="editor-container"></div>
+  </div>
+
+  <!-- Right: output -->
+  <div class="pane">
+    <div id="output-tabs">
+      <div class="tab active" data-tab="output">mcfunction output</div>
+      <div class="tab" data-tab="files">all files</div>
+    </div>
+    <div class="editor-wrap" id="output-container"></div>
+    <div id="error-panel"></div>
+    <div id="stats-bar">
+      <span>Commands: <b id="stat-cmds">—</b></span>
+      <span>Functions: <b id="stat-fns">—</b></span>
+      <span>Files: <b id="stat-files">—</b></span>
+      <span>Warnings: <b id="stat-warns">—</b></span>
+    </div>
+  </div>
+
+</div>
+
+<!-- Monaco loader -->
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+<!-- Bundled compiler -->
+<script src="./compiler.js"></script>
+
+<script>
+const EXAMPLES = {
+  counter: `// Simple tick counter
+let count: int = 0;
+
+@tick(rate=20)
+fn every_second() {
+    count = count + 1;
+    actionbar(@a, "Time: \${count}s");
+}
+`,
+  pvp: `// PVP game timer
+import "stdlib/player.rs"
+
+const GAME_TIME: int = 300;
+
+@tick(rate=20)
+fn tick_game() {
+    let time: int = scoreboard_get("#game", "timer");
+    if (time <= 0) {
+        end_game();
+        return;
+    }
+    scoreboard_set("#game", "timer", time - 1);
+    actionbar(@a, "⏱ \${time}s remaining");
+}
+
+fn start_game() {
+    scoreboard_set("#game", "timer", GAME_TIME);
+    title(@a, "Fight!", "Game started");
+    tp(@a, (0, 64, 0));
+}
+
+fn end_game() {
+    title(@a, "Game Over!");
+    announce("Thanks for playing!");
+}
+
+@on_death
+fn on_kill() {
+    scoreboard_add(@s, "kills", 1);
+}
+`,
+  shop: `// Item shop
+fn buy_sword() {
+    let coins: int = scoreboard_get(@s, "coins");
+    if (coins >= 10) {
+        scoreboard_set(@s, "coins", coins - 10);
+        give(@s, "minecraft:iron_sword", 1);
+        tell(@s, "Purchased iron sword for 10 coins!");
+    } else {
+        tell(@s, "Not enough coins! Need 10, have \${coins}.");
+    }
+}
+
+fn buy_diamond() {
+    let coins: int = scoreboard_get(@s, "coins");
+    if (coins >= 50) {
+        scoreboard_set(@s, "coins", coins - 50);
+        give(@s, "minecraft:diamond", 5);
+        tell(@s, "Purchased 5 diamonds for 50 coins!");
+    } else {
+        tell(@s, "Need 50 coins!");
+    }
+}
+`,
+  lambda: `// Lambda and higher-order functions
+fn apply(f: (int) -> int, x: int) -> int {
+    return f(x);
+}
+
+fn apply_twice(f: (int) -> int, x: int) -> int {
+    return apply(f, apply(f, x));
+}
+
+fn run_demo() {
+    let double = (x: int) -> int { return x * 2; };
+    let add_ten = (x: int) -> int { return x + 10; };
+
+    let result: int = apply_twice(double, 5); // 20
+    scoreboard_set("#demo", "result", result);
+    announce("Result: \${result}");
+}
+`,
+  structs: `// Structs and enums
+enum Phase { Lobby, Playing, Ended }
+
+struct Player {
+    score: int,
+    alive: bool,
+}
+
+fn check_phase(phase: Phase) {
+    match (phase) {
+        Phase::Lobby   => { announce("Waiting for players..."); }
+        Phase::Playing => { announce("Game in progress!"); }
+        Phase::Ended   => { announce("Game over!"); }
+    }
+}
+
+fn award_winner() {
+    let top: int = scoreboard_get(@e[sort=furthest, limit=1], "score");
+    if (top > 0) {
+        give(@e[sort=furthest, limit=1], "minecraft:diamond", 5);
+        title(@a, "Winner!", "Congratulations!");
+    }
+}
+`
+}
+
+// ── Monaco setup ──
+require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' } })
+
+require(['vs/editor/editor.main'], function() {
+  // Register RedScript language
+  monaco.languages.register({ id: 'redscript', extensions: ['.rs'] })
+  monaco.languages.setMonarchTokensProvider('redscript', {
+    keywords: ['fn', 'let', 'const', 'if', 'else', 'for', 'foreach', 'while', 'return', 'match', 'import', 'struct', 'enum', 'in', 'as', 'at', 'execute'],
+    builtins: ['say','tell','announce','title','subtitle','actionbar','give','kill','effect','tp','setblock','fill','summon','weather','gamerule','scoreboard_get','scoreboard_set','scoreboard_add','score','random','random_native','push','pop','team_add','team_join','bossbar_add'],
+    tokenizer: {
+      root: [
+        [/\/\/.*$/, 'comment'],
+        [/\/\*/, 'comment', '@comment'],
+        [/@[aesprnAESPRN](\[[^\]]*\])?/, 'variable.language'],
+        [/@[a-zA-Z_]+/, 'decorator'],
+        [/"([^"\\]|\\.)*\$\{[^}]*\}([^"\\]|\\.)*"/, 'string.interpolated'],
+        [/"([^"\\]|\\.)*"/, 'string'],
+        [/\b(true|false)\b/, 'constant.language'],
+        [/\b[A-Z][A-Z0-9_]{2,}\b/, 'variable.constant'],
+        [/\b[A-Z][A-Za-z0-9]*\b/, 'type'],
+        [/[~^]-?\d*(\.\d+)?/, 'constant.blockpos'],
+        [/\b\d+(\.\d+)?\b/, 'number'],
+        [/\b(fn)\s+([a-z_]\w*)/, ['keyword', 'entity.name.function']],
+        [{ cases: { '@builtins': 'support.function', '@keywords': 'keyword', '@default': 'identifier' } }, ''],
+        [/[{}()\[\]]/, 'delimiter'],
+        [/[;,:]/, 'delimiter'],
+        [/->|::|\.\.|[+\-*/%=<>!&|]+/, 'operator'],
+      ],
+      comment: [[/\*\//, 'comment', '@pop'], [/./, 'comment']],
+    }
+  })
+
+  const theme = {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [
+      { token: 'keyword',              foreground: 'cba6f7', fontStyle: 'bold' },
+      { token: 'decorator',            foreground: 'cba6f7', fontStyle: 'italic' },
+      { token: 'support.function',     foreground: '89dceb', fontStyle: 'bold' },
+      { token: 'entity.name.function', foreground: 'a6e3a1' },
+      { token: 'type',                 foreground: 'f9e2af' },
+      { token: 'variable.language',    foreground: '89b4fa', fontStyle: 'bold' },
+      { token: 'variable.constant',    foreground: 'fab387' },
+      { token: 'constant.language',    foreground: 'fab387' },
+      { token: 'constant.blockpos',    foreground: 'f38ba8' },
+      { token: 'string',               foreground: 'a6e3a1' },
+      { token: 'string.interpolated',  foreground: 'a6e3a1' },
+      { token: 'number',               foreground: 'fab387' },
+      { token: 'comment',              foreground: '6c7086', fontStyle: 'italic' },
+      { token: 'delimiter',            foreground: '9399b2' },
+      { token: 'operator',             foreground: '89dceb' },
+    ],
+    colors: {
+      'editor.background':           '#1e1e2e',
+      'editor.foreground':           '#cdd6f4',
+      'editorLineNumber.foreground': '#6c7086',
+      'editor.lineHighlightBackground': '#2a2a3e',
+      'editorCursor.foreground':     '#cba6f7',
+      'editor.selectionBackground':  '#3d3d5c',
+    }
+  }
+  monaco.editor.defineTheme('catppuccin', theme)
+
+  // Input editor
+  const editor = monaco.editor.create(document.getElementById('editor-container'), {
+    value: EXAMPLES.counter,
+    language: 'redscript',
+    theme: 'catppuccin',
+    fontSize: 14,
+    fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
+    fontLigatures: true,
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    lineNumbers: 'on',
+    wordWrap: 'on',
+    automaticLayout: true,
+    padding: { top: 8 },
+  })
+
+  // Output editor (read-only)
+  const output = monaco.editor.create(document.getElementById('output-container'), {
+    value: '# Click Compile or start typing...',
+    language: 'mcfunction',
+    theme: 'catppuccin',
+    fontSize: 13,
+    fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
+    readOnly: true,
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    lineNumbers: 'on',
+    automaticLayout: true,
+    padding: { top: 8 },
+  })
+
+  // Cursor position
+  editor.onDidChangeCursorPosition(e => {
+    document.getElementById('cursor-pos').textContent =
+      `Ln ${e.position.lineNumber}, Col ${e.position.column}`
+  })
+
+  // ── Compile ──
+  let debounce = null
+  let allFiles = []
+
+  function compile() {
+    const src = editor.getValue()
+    const btn = document.getElementById('compile-btn')
+    const badge = document.getElementById('status-badge')
+    const errPanel = document.getElementById('error-panel')
+
+    btn.classList.add('loading')
+    btn.innerHTML = '<div class="spinner"></div> Compiling'
+    badge.className = 'status-badge'
+    badge.textContent = '...'
+
+    // Defer to allow repaint
+    setTimeout(() => {
+      try {
+        const result = RedScriptCompiler.compileRedScript(src)
+        allFiles = []
+
+        if (!result.ok) {
+          // Error
+          badge.className = 'status-badge err'
+          badge.textContent = '✗ error'
+          errPanel.style.display = 'block'
+          errPanel.textContent = result.error
+          output.setValue('# Compilation failed\n\n' + result.error)
+          clearStats()
+        } else {
+          allFiles = result.files
+          errPanel.style.display = 'none'
+
+          const warns = result.warnings ?? []
+          if (warns.length) {
+            badge.className = 'status-badge warn'
+            badge.textContent = `⚠ ${warns.length} warn`
+          } else {
+            badge.className = 'status-badge ok'
+            badge.textContent = '✓ ok'
+          }
+
+          renderOutput()
+          updateStats(result)
+        }
+      } catch (e) {
+        badge.className = 'status-badge err'
+        badge.textContent = '✗ crash'
+        errPanel.style.display = 'block'
+        errPanel.textContent = String(e)
+      }
+      btn.classList.remove('loading')
+      btn.innerHTML = '<span class="btn-icon">▶</span> Compile'
+    }, 10)
+  }
+
+  function renderOutput() {
+    const activeTab = document.querySelector('.tab.active')?.dataset.tab
+    if (activeTab === 'files') {
+      output.setValue(
+        allFiles.map(f => `// ── ${f.path} ──\n${f.content}`).join('\n\n')
+      )
+    } else {
+      // Show the first .mcfunction file
+      const fn = allFiles.find(f => f.path.endsWith('.mcfunction'))
+        || allFiles.find(f => f.content.trim())
+      output.setValue(fn ? fn.content : '# (no output)')
+    }
+  }
+
+  function clearStats() {
+    document.getElementById('stat-cmds').textContent = '—'
+    document.getElementById('stat-fns').textContent = '—'
+    document.getElementById('stat-files').textContent = '—'
+    document.getElementById('stat-warns').textContent = '—'
+  }
+
+  function updateStats(result) {
+    const files = result.files ?? []
+    const mcFns = files.filter(f => f.path.endsWith('.mcfunction'))
+    const cmds = mcFns.reduce((n, f) => n + f.content.split('\n').filter(l => l.trim() && !l.startsWith('#')).length, 0)
+    document.getElementById('stat-cmds').textContent = cmds
+    document.getElementById('stat-fns').textContent = mcFns.length
+    document.getElementById('stat-files').textContent = files.length
+    document.getElementById('stat-warns').textContent = (result.warnings ?? []).length
+  }
+
+  // Auto-compile on change (debounced)
+  editor.onDidChangeModelContent(() => {
+    clearTimeout(debounce)
+    debounce = setTimeout(compile, 800)
+  })
+
+  // Compile button
+  document.getElementById('compile-btn').addEventListener('click', compile)
+
+  // Example selector
+  document.getElementById('example-select').addEventListener('change', e => {
+    const key = e.target.value
+    if (key && EXAMPLES[key]) {
+      editor.setValue(EXAMPLES[key])
+      e.target.value = ''
+    }
+  })
+
+  // Output tabs
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
+      tab.classList.add('active')
+      if (allFiles.length) renderOutput()
+    })
+  })
+
+  // Initial compile
+  compile()
+})
+</script>
+</body>
+</html>
