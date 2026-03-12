@@ -11,7 +11,7 @@
  * Variable mapping:
  *   scoreboard objective: "rs"
  *   fake player:          "$<varname>"
- *   temporaries:          "$t0", "$t1", ...
+ *   temporaries:          "$_0", "$_1", ...
  *   return value:         "$ret"
  *   parameters:           "$p0", "$p1", ...
  */
@@ -293,7 +293,7 @@ export function generateDatapackWithStats(
     `scoreboard objectives add ${OBJ} dummy`,
   ]
   for (const g of module.globals) {
-    loadLines.push(`scoreboard players set ${varRef(g)} ${OBJ} 0`)
+    loadLines.push(`scoreboard players set ${varRef(g.name)} ${OBJ} ${g.init}`)
   }
 
   // Add trigger objectives

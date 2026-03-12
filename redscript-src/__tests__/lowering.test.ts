@@ -528,10 +528,10 @@ fn choose(dir: Direction) {
       const fn = getFunction(ir, 'test')!
       const rawCmds = getRawCommands(fn)
       expect(rawCmds).toContain('tp @s @p')
-      expect(warnings).toContainEqual({
+      expect(warnings).toContainEqual(expect.objectContaining({
         code: 'W_DEPRECATED',
         message: 'tp_to is deprecated; use tp instead',
-      })
+      }))
     })
 
     it('lowers inventory and player admin commands', () => {
@@ -635,7 +635,7 @@ fn test() {
       expect(rawCmds).toContain('bossbar set ns:health visible true')
       expect(rawCmds).toContain('bossbar set ns:health players @a')
       expect(rawCmds).toContain('bossbar remove ns:health')
-      expect(rawCmds.some(cmd => /^execute store result score \$t\d+ rs run bossbar get ns:health value$/.test(cmd))).toBe(true)
+      expect(rawCmds.some(cmd => /^execute store result score \$_\d+ rs run bossbar get ns:health value$/.test(cmd))).toBe(true)
     })
 
     it('lowers team management builtins', () => {
@@ -665,14 +665,14 @@ fn test() {
       const ir = compile('fn test() { let x: int = random(1, 100); }')
       const fn = getFunction(ir, 'test')!
       const rawCmds = getRawCommands(fn)
-      expect(rawCmds).toContain('scoreboard players random $t0 rs 1 100')
+      expect(rawCmds).toContain('scoreboard players random $_0 rs 1 100')
     })
 
     it('lowers random_native()', () => {
       const ir = compile('fn test() { let x: int = random_native(1, 6); }')
       const fn = getFunction(ir, 'test')!
       const rawCmds = getRawCommands(fn)
-      expect(rawCmds).toContain('execute store result score $t0 rs run random value 1 6')
+      expect(rawCmds).toContain('execute store result score $_0 rs run random value 1 6')
     })
 
     it('lowers random_sequence()', () => {
@@ -754,10 +754,10 @@ fn test() {
       expect(rawCmds.some(cmd =>
         cmd.includes('run scoreboard players get @s score')
       )).toBe(true)
-      expect(warnings).toContainEqual({
+      expect(warnings).toContainEqual(expect.objectContaining({
         code: 'W_QUOTED_SELECTOR',
         message: 'Quoted selector "@s" is deprecated; pass @s without quotes',
-      })
+      }))
     })
 
     it('does not warn on fake player names', () => {
@@ -777,10 +777,10 @@ fn test() {
       expect(rawCmds.some(cmd =>
         cmd.includes('run data get entity @s Pos[0] 1')
       )).toBe(true)
-      expect(warnings).toContainEqual({
+      expect(warnings).toContainEqual(expect.objectContaining({
         code: 'W_QUOTED_SELECTOR',
         message: 'Quoted selector "@s" is deprecated; pass @s without quotes',
-      })
+      }))
     })
   })
 
@@ -957,6 +957,51 @@ fn count_down() {
       const bodyBlock = fn.blocks.find(b => b.label.includes('loop_body'))
       expect(checkBlock).toBeDefined()
       expect(bodyBlock).toBeDefined()
+    })
+  })
+
+  describe('Global variables', () => {
+    it('registers global in IR globals with init value', () => {
+      const ir = compile('let x: int = 42;\nfn test() { say("hi"); }')
+      expect(ir.globals).toContainEqual({ name: '$x', init: 42 })
+    })
+
+    it('reads global variable in function body', () => {
+      const ir = compile('let count: int = 0;\nfn test() { let y: int = count; }')
+      const fn = getFunction(ir, 'test')!
+      const instrs = getInstructions(fn)
+      expect(instrs.some(i =>
+        i.op === 'assign' && i.dst === '$y' && (i.src as any).kind === 'var' && (i.src as any).name === '$count'
+      )).toBe(true)
+    })
+
+    it('writes global variable in function body', () => {
+      const ir = compile('let count: int = 0;\nfn inc() { count = 5; }')
+      const fn = getFunction(ir, 'inc')!
+      const instrs = getInstructions(fn)
+      expect(instrs.some(i =>
+        i.op === 'assign' && i.dst === '$count' && (i.src as any).kind === 'const' && (i.src as any).value === 5
+      )).toBe(true)
+    })
+
+    it('compound assignment on global variable', () => {
+      const ir = compile('let count: int = 0;\nfn inc() { count += 1; }')
+      const fn = getFunction(ir, 'inc')!
+      const instrs = getInstructions(fn)
+      expect(instrs.some(i =>
+        i.op === 'binop' && (i.lhs as any).name === '$count' && i.bop === '+' && (i.rhs as any).value === 1
+      )).toBe(true)
+    })
+
+    it('const cannot be reassigned', () => {
+      const src = 'const X: int = 5;\nfn bad() { X = 10; }'
+      expect(() => compile(src)).toThrow(/Cannot assign to constant/)
+    })
+
+    it('multiple globals with different init values', () => {
+      const ir = compile('let a: int = 10;\nlet b: int = 20;\nfn test() { a = b; }')
+      expect(ir.globals).toContainEqual({ name: '$a', init: 10 })
+      expect(ir.globals).toContainEqual({ name: '$b', init: 20 })
     })
   })
 })

@@ -29,13 +29,15 @@ Usage:
   redscript compile <file> [-o <out>] [--output-nbt <file>] [--namespace <ns>] [--target <target>]
   redscript watch <dir> [-o <outdir>] [--namespace <ns>] [--hot-reload <url>]
   redscript check <file>
+  redscript fmt <file.mcrs> [file2.mcrs ...]
   redscript repl
   redscript version
 
 Commands:
   compile   Compile a RedScript file to a Minecraft datapack
-  watch     Watch a directory for .rs file changes, recompile, and hot reload
+  watch     Watch a directory for .mcrs file changes, recompile, and hot reload
   check     Check a RedScript file for errors without generating output
+  fmt       Auto-format RedScript source files
   repl      Start an interactive RedScript REPL
   version   Print the RedScript version
 
@@ -266,7 +268,7 @@ function watchCommand(dir: string, output: string, namespace?: string, hotReload
     process.exit(1)
   }
 
-  console.log(`👁  Watching ${dir} for .rs file changes...`)
+  console.log(`👁  Watching ${dir} for .mcrs file changes...`)
   console.log(`   Output: ${output}`)
   if (hotReloadUrl) console.log(`   Hot reload: ${hotReloadUrl}`)
   console.log(`   Press Ctrl+C to stop\n`)
@@ -274,11 +276,11 @@ function watchCommand(dir: string, output: string, namespace?: string, hotReload
   // Debounce timer
   let debounceTimer: NodeJS.Timeout | null = null
 
-  // Compile all .rs files in directory
+  // Compile all .mcrs files in directory
   async function compileAll(): Promise<void> {
     const files = findRsFiles(dir)
     if (files.length === 0) {
-      console.log(`⚠  No .rs files found in ${dir}`)
+      console.log(`⚠  No .mcrs files found in ${dir}`)
       return
     }
 
@@ -317,7 +319,7 @@ function watchCommand(dir: string, output: string, namespace?: string, hotReload
     }
   }
 
-  // Find all .rs files recursively
+  // Find all .mcrs files recursively
   function findRsFiles(directory: string): string[] {
     const results: string[] = []
     const entries = fs.readdirSync(directory, { withFileTypes: true })
@@ -326,7 +328,7 @@ function watchCommand(dir: string, output: string, namespace?: string, hotReload
       const fullPath = path.join(directory, entry.name)
       if (entry.isDirectory()) {
         results.push(...findRsFiles(fullPath))
-      } else if (entry.isFile() && entry.name.endsWith('.rs')) {
+      } else if (entry.isFile() && entry.name.endsWith('.mcrs')) {
         results.push(fullPath)
       }
     }
@@ -339,7 +341,7 @@ function watchCommand(dir: string, output: string, namespace?: string, hotReload
 
   // Watch for changes
   fs.watch(dir, { recursive: true }, (eventType, filename) => {
-    if (filename && filename.endsWith('.rs')) {
+    if (filename && filename.endsWith('.mcrs')) {
       // Debounce rapid changes
       if (debounceTimer) {
         clearTimeout(debounceTimer)
@@ -407,6 +409,23 @@ async function main(): Promise<void> {
       }
       checkCommand(parsed.file)
       break
+
+    case 'fmt':
+    case 'format': {
+      const files = args.filter(a => a.endsWith('.mcrs'))
+      if (files.length === 0) {
+        console.error('Usage: redscript fmt <file.mcrs> [file2.mcrs ...]')
+        process.exit(1)
+      }
+      const { format } = require('./formatter')
+      for (const file of files) {
+        const content = fs.readFileSync(file, 'utf8')
+        const formatted = format(content)
+        fs.writeFileSync(file, formatted)
+        console.log(`Formatted: ${file}`)
+      }
+      break
+    }
 
     case 'repl':
       await startRepl(parsed.namespace ?? 'repl')

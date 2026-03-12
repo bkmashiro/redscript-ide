@@ -340,7 +340,7 @@ fn test() {
       expect(fn).toContain('bossbar set ns:health visible true')
       expect(fn).toContain('bossbar set ns:health players @a')
       expect(fn).toContain('bossbar remove ns:health')
-      expect(fn).toMatch(/execute store result score \$t\d+ rs run bossbar get ns:health value/)
+      expect(fn).toMatch(/execute store result score \$_\d+ rs run bossbar get ns:health value/)
     })
 
     it('compiles team builtins', () => {
@@ -651,21 +651,21 @@ fn double_score() -> int {
       const source = 'fn test() { let x: int = random(1, 10); }'
       const files = compile(source)
       const fn = getFunction(files, 'test')
-      expect(fn).toContain('scoreboard players random $t0 rs 1 10')
+      expect(fn).toContain('scoreboard players random $_0 rs 1 10')
     })
 
     it('compiles random_native()', () => {
       const source = 'fn test() { let x: int = random_native(1, 6); }'
       const files = compile(source)
       const fn = getFunction(files, 'test')
-      expect(fn).toContain('execute store result score $t0 rs run random value 1 6')
+      expect(fn).toContain('execute store result score $_0 rs run random value 1 6')
     })
 
     it('compiles random_native() with zero min', () => {
       const source = 'fn test() { let x: int = random_native(0, 100); }'
       const files = compile(source)
       const fn = getFunction(files, 'test')
-      expect(fn).toContain('execute store result score $t0 rs run random value 0 100')
+      expect(fn).toContain('execute store result score $_0 rs run random value 0 100')
     })
 
     it('compiles random_sequence()', () => {
@@ -1188,7 +1188,7 @@ fn handle_claim() {
     })
   })
 
-  describe('Real program: zombie_game.rs', () => {
+  describe('Real program: zombie_game.mcrs', () => {
     const source = `
 // A zombie survival game logic
 // Kills nearby zombies and tracks score
@@ -1454,5 +1454,367 @@ fn test_kill() {
       expect(fn).toBeDefined()
       expect(fn).toContain('kill @e[tag=__rs_obj_')
     })
+  })
+})
+
+describe('#mc_name syntax', () => {
+  describe('scoreboard with #mc_name objective', () => {
+    const source = `
+fn heal(amount: int) {
+    let health: int = scoreboard_get(@p, #health);
+    let next: int = health + amount;
+    scoreboard_set(@p, #health, next);
+}
+`
+    it('compiles #health to bare objective name (no quotes)', () => {
+      const files = compile(source, 'mcname')
+      const fn = getFunction(files, 'heal')
+      expect(fn).toBeDefined()
+      expect(fn).toContain('scoreboard players get @p health')
+    })
+    it('does not produce quoted "health" in output', () => {
+      const files = compile(source, 'mcname')
+      const fn = getFunction(files, 'heal')
+      expect(fn).not.toContain('"health"')
+    })
+  })
+
+  describe('backward compat: string objective still works', () => {
+    const source = `fn test() { let x: int = scoreboard_get(@s, "kills"); }`
+    it('compiles "kills" string to bare objective name', () => {
+      const files = compile(source, 'compat')
+      const fn = getFunction(files, 'test')
+      expect(fn).toContain('scoreboard players get @s kills')
+    })
+  })
+
+  describe('#mc_name with fake player target', () => {
+    const source = `
+fn tick_game() {
+    let timer: int = scoreboard_get(#game, #timer);
+    scoreboard_set(#game, #timer, timer - 1);
+}
+`
+    it('compiles #game fake player and #timer objective correctly', () => {
+      const files = compile(source, 'fakeplay')
+      const fn = getFunction(files, 'tick_game')
+      expect(fn).toBeDefined()
+      expect(fn).toContain('scoreboard players get game timer')
+      expect(fn).toContain('game timer')
+    })
+  })
+
+  describe('tag_add with #mc_name', () => {
+    const source = `fn mark() { tag_add(@s, #hasKey); }`
+    it('compiles tag_add with #mc_name', () => {
+      const files = compile(source, 'tagname')
+      const fn = getFunction(files, 'mark')
+      expect(fn).toBeDefined()
+      expect(fn).toContain('tag @s add hasKey')
+    })
+  })
+
+  describe('gamerule with #mc_name', () => {
+    const source = `fn setup() { gamerule(#keepInventory, true); }`
+    it('compiles gamerule with #mc_name', () => {
+      const files = compile(source, 'gamerule')
+      const fn = getFunction(files, 'setup')
+      expect(fn).toBeDefined()
+      expect(fn).toContain('gamerule keepInventory')
+    })
+  })
+
+  describe('NBT literals', () => {
+    it('compiles byte literal', () => {
+      const files = compile('fn test() -> int { let x: byte = 20b; return x; }', 'nbt')
+      const fn = getFunction(files, 'test')
+      expect(fn).toBeDefined()
+      expect(fn).toContain('20')
+    })
+
+    it('compiles short literal', () => {
+      const files = compile('fn test() -> int { let x: short = 100s; return x; }', 'nbt')
+      const fn = getFunction(files, 'test')
+      expect(fn).toBeDefined()
+      expect(fn).toContain('100')
+    })
+
+    it('compiles long literal', () => {
+      const files = compile('fn test() -> int { let x: long = 1000L; return x; }', 'nbt')
+      const fn = getFunction(files, 'test')
+      expect(fn).toBeDefined()
+      expect(fn).toContain('1000')
+    })
+
+    it('compiles double literal', () => {
+      const files = compile('fn test() -> int { let x: double = 3.14d; return x; }', 'nbt')
+      const fn = getFunction(files, 'test')
+      expect(fn).toBeDefined()
+    })
+
+    it('compiles float literal with f suffix', () => {
+      const files = compile('fn test() -> int { let x: float = 2.5f; return x; }', 'nbt')
+      const fn = getFunction(files, 'test')
+      expect(fn).toBeDefined()
+    })
+
+    it('type-checks NBT literals without errors', () => {
+      const errors = typeCheck(`
+        fn test() {
+          let a = 20b;
+          let b = 100s;
+          let c = 1000L;
+          let d = 3.14d;
+          let e = 2.5f;
+        }
+      `)
+      expect(errors).toHaveLength(0)
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Type Inference
+  // ---------------------------------------------------------------------------
+
+  describe('Type inference', () => {
+    it('infers int type', () => {
+      const errors = typeCheck(`
+        fn test() {
+          let x = 5;
+          let y: int = x + 1;
+        }
+      `)
+      expect(errors).toHaveLength(0)
+    })
+
+    it('infers string type', () => {
+      const errors = typeCheck(`
+        fn test() {
+          let x = "hello";
+          let y: string = x;
+        }
+      `)
+      expect(errors).toHaveLength(0)
+    })
+
+    it('infers bool type', () => {
+      const errors = typeCheck(`
+        fn test() {
+          let x = true;
+          let y: bool = x;
+        }
+      `)
+      expect(errors).toHaveLength(0)
+    })
+
+    it('infers from function return', () => {
+      const errors = typeCheck(`
+        fn get_value() -> int { return 42; }
+        fn test() {
+          let x = get_value();
+          let y: int = x + 1;
+        }
+      `)
+      expect(errors).toHaveLength(0)
+    })
+
+    it('infers NBT types from suffix', () => {
+      const files = compile(`
+        fn test() {
+          let a = 20b;
+          let b = 100s;
+          let c = 1000L;
+          let d = 3.14d;
+        }
+      `)
+      expect(files.length).toBeGreaterThan(0)
+    })
+
+    it('detects type mismatch with inferred type', () => {
+      const errors = typeCheck(`
+        fn test() {
+          let x = 5;
+          let y: string = x;
+        }
+      `)
+      expect(errors.length).toBeGreaterThan(0)
+    })
+
+    it('compiles let without type annotation', () => {
+      const files = compile(`
+        fn test() {
+          let x = 5;
+          let y = x + 1;
+        }
+      `)
+      expect(files.length).toBeGreaterThan(0)
+    })
+  })
+})
+
+describe('for-range loop', () => {
+  it('compiles basic for-range loop', () => {
+    const src = `fn test() { for i in 0..5 { say("hi"); } }`
+    const files = compile(src, 'forloop')
+    expect(files.some(f => f.path.includes('__for'))).toBe(true)
+  })
+
+  it('initializes loop variable', () => {
+    const src = `fn test() { for i in 0..5 { say("hi"); } }`
+    const files = compile(src, 'forloop')
+    const fn = getFunction(files, 'test')
+    expect(fn).toContain('scoreboard players set $i rs 0')
+  })
+
+  it('generates loop sub-function with increment and condition', () => {
+    const src = `fn test() { for i in 0..5 { say("hi"); } }`
+    const files = compile(src, 'forloop')
+    const subFn = files.find(f => f.path.includes('__for_0'))
+    expect(subFn).toBeDefined()
+    expect(subFn?.content).toContain('say hi')
+    expect(subFn?.content).toContain('scoreboard players add $i rs 1')
+    expect(subFn?.content).toContain('execute if score $i rs matches ..4 run function forloop:test/__for_0')
+  })
+
+  it('supports non-zero start', () => {
+    const src = `fn test() { for x in 3..8 { say("loop"); } }`
+    const files = compile(src, 'forloop2')
+    const fn = getFunction(files, 'test')
+    expect(fn).toContain('scoreboard players set $x rs 3')
+    const subFn = files.find(f => f.path.includes('__for_0'))
+    expect(subFn?.content).toContain('execute if score $x rs matches ..7 run function forloop2:test/__for_0')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// NBT Structured Parameters
+// ---------------------------------------------------------------------------
+
+describe('NBT parameters', () => {
+  it('compiles give with NBT struct', () => {
+    const src = `fn test() { give(@s, "minecraft:diamond_sword", 1, { display: { Name: "Excalibur" } }); }`
+    const files = compile(src, 'nbtparam')
+    const fn = getFunction(files, 'test')
+    expect(fn).toContain('give @s minecraft:diamond_sword{display:{Name:"Excalibur"}} 1')
+  })
+
+  it('compiles give with nested NBT and arrays', () => {
+    const src = `fn test() { give(@s, "minecraft:stick", 1, { display: { Name: "Magic Wand" }, Enchantments: [{ id: "sharpness", lvl: 5 }] }); }`
+    const files = compile(src, 'nbtparam2')
+    const fn = getFunction(files, 'test')
+    expect(fn).toContain('{display:{Name:"Magic Wand"},Enchantments:[{id:"sharpness",lvl:5}]}')
+  })
+
+  it('compiles summon with NBT', () => {
+    const src = `fn test() { summon("minecraft:zombie", 0, 64, 0, { CustomName: "Boss", NoAI: true }); }`
+    const files = compile(src, 'nbtsummon')
+    const fn = getFunction(files, 'test')
+    expect(fn).toContain('summon minecraft:zombie 0 64 0 {CustomName:"Boss",NoAI:1b}')
+  })
+
+  it('compiles give with bool values in NBT', () => {
+    const src = `fn test() { give(@s, "minecraft:shield", 1, { Unbreakable: true }); }`
+    const files = compile(src, 'nbtbool')
+    const fn = getFunction(files, 'test')
+    expect(fn).toContain('{Unbreakable:1b}')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Set Operations
+// ---------------------------------------------------------------------------
+
+describe('Set operations', () => {
+  it('creates a new set', () => {
+    const src = `fn test() { let s = set_new(); }`
+    const files = compile(src, 'settest')
+    const fn = getFunction(files, 'test')
+    expect(fn).toContain('data modify storage rs:sets __set_0 set value []')
+  })
+
+  it('adds to a set with uniqueness check', () => {
+    const src = `fn test() { let s = set_new(); set_add(s, "apple"); }`
+    const files = compile(src, 'setadd')
+    const fn = getFunction(files, 'test')
+    expect(fn).toContain('execute unless data storage rs:sets __set_0[{value:apple}] run data modify storage rs:sets __set_0 append value {value:apple}')
+  })
+
+  it('checks set membership', () => {
+    const src = `fn test() { let s = set_new(); set_add(s, "x"); let has = set_contains(s, "x"); }`
+    const files = compile(src, 'setcontains')
+    const fn = getFunction(files, 'test')
+    expect(fn).toContain('if data storage rs:sets __set_0[{value:x}]')
+  })
+
+  it('removes from a set', () => {
+    const src = `fn test() { let s = set_new(); set_add(s, "y"); set_remove(s, "y"); }`
+    const files = compile(src, 'setremove')
+    const fn = getFunction(files, 'test')
+    expect(fn).toContain('data remove storage rs:sets __set_0[{value:y}]')
+  })
+
+  it('clears a set', () => {
+    const src = `fn test() { let s = set_new(); set_clear(s); }`
+    const files = compile(src, 'setclear')
+    const fn = getFunction(files, 'test')
+    expect(fn).toContain('data modify storage rs:sets __set_0 set value []')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Method Syntax Sugar
+// ---------------------------------------------------------------------------
+
+describe('Method syntax sugar', () => {
+  it('transforms obj.method() to method(obj)', () => {
+    const src = `fn test() { let s = set_new(); s.clear(); }`
+    const files = compile(src, 'method1')
+    const fn = getFunction(files, 'test')
+    expect(fn).toContain('data modify storage rs:sets __set_0 set value []')
+  })
+
+  it('transforms obj.method(arg) to method(obj, arg)', () => {
+    const src = `fn test() { let s = set_new(); s.add("apple"); }`
+    const files = compile(src, 'method2')
+    const fn = getFunction(files, 'test')
+    expect(fn).toContain('data modify storage rs:sets __set_0 append value {value:apple}')
+  })
+
+  it('transforms obj.method(arg) with contains', () => {
+    const src = `fn test() { let s = set_new(); s.add("x"); let r = s.contains("x"); }`
+    const files = compile(src, 'method3')
+    const fn = getFunction(files, 'test')
+    expect(fn).toBeDefined()
+  })
+
+  it('works with multiple args', () => {
+    const src = `fn test() { let s = set_new(); s.add("a"); s.add("b"); s.remove("a"); }`
+    const files = compile(src, 'method4')
+    const fn = getFunction(files, 'test')
+    expect(fn).toContain('data remove storage rs:sets __set_0[{value:a}]')
+  })
+})
+
+describe('Global variables', () => {
+  it('initializes global in __load', () => {
+    const src = `let x: int = 42;\nfn test() { say("hi"); }`
+    const files = compile(src, 'globaltest')
+    const load = getFunction(files, '__load')
+    expect(load).toContain('scoreboard players set $x rs 42')
+  })
+
+  it('reads and writes global in function', () => {
+    const src = `let count: int = 0;\nfn inc() { count = count + 1; }`
+    const files = compile(src, 'globalrw')
+    const fn = getFunction(files, 'inc')
+    expect(fn).toBeDefined()
+    // Global should be initialized in __load
+    const load = getFunction(files, '__load')
+    expect(load).toContain('scoreboard players set $count rs 0')
+  })
+
+  it('const cannot be reassigned', () => {
+    const src = `const X: int = 5;\nfn bad() { X = 10; }`
+    expect(() => compile(src, 'constbad')).toThrow()
   })
 })

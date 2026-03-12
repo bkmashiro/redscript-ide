@@ -8,7 +8,7 @@
  *   - Integer vars  → scoreboard fake player  ($name on objective "rs_vars")
  *   - Complex data  → NBT storage             (redscript:stack / redscript:heap)
  *   - Return value  → fake player $ret
- *   - Temporaries   → $t0, $t1, ...
+ *   - Temporaries   → $_0, $_1, ...
  */
 
 // ---------------------------------------------------------------------------
@@ -112,8 +112,13 @@ export interface IRFunction {
 // Module — top-level compilation unit
 // ---------------------------------------------------------------------------
 
+export interface GlobalVar {
+  name: string
+  init: number
+}
+
 export interface IRModule {
   namespace: string        // datapack namespace (e.g. "mypack")
   functions: IRFunction[]
-  globals: string[]        // global variable names
+  globals: GlobalVar[]     // global variable declarations with init values
 }

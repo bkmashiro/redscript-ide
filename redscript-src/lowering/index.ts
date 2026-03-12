@@ -10,9 +10,10 @@ import { buildModule } from '../ir/builder'
 import type { IRFunction, IRModule, Operand, BinOp, CmpOp } from '../ir/types'
 import { DiagnosticError } from '../diagnostics'
 import type {
-  Block, ConstDecl, Decorator, EntitySelector, Expr, FnDecl, Program, RangeExpr, Stmt,
+  Block, ConstDecl, Decorator, EntitySelector, Expr, FnDecl, GlobalDecl, Program, RangeExpr, Span, Stmt,
   StructDecl, TypeNode, ExecuteSubcommand, BlockPosExpr, CoordComponent
 } from '../ast/types'
+import type { GlobalVar } from '../ir/types'
 
 // ---------------------------------------------------------------------------
 // Builtin Functions
@@ -26,7 +27,7 @@ const BUILTINS: Record<string, (args: string[]) => string | null> = {
   subtitle:    ([sel, msg]) => `title ${sel} subtitle {"text":"${msg}"}`,
   title_times: ([sel, fadeIn, stay, fadeOut]) => `title ${sel} times ${fadeIn} ${stay} ${fadeOut}`,
   announce:    ([msg]) => `tellraw @a {"text":"${msg}"}`,
-  give:        ([sel, item, count]) => `give ${sel} ${item} ${count ?? '1'}`,
+  give:        ([sel, item, count, nbt]) => nbt ? `give ${sel} ${item}${nbt} ${count ?? '1'}` : `give ${sel} ${item} ${count ?? '1'}`,
   kill:        ([sel]) => `kill ${sel ?? '@s'}`,
   effect:      ([sel, eff, dur, amp]) => `effect give ${sel} ${eff} ${dur ?? '30'} ${amp ?? '0'}`,
   summon: ([type, x, y, z, nbt]) => {
@@ -80,11 +81,22 @@ const BUILTINS: Record<string, (args: string[]) => string | null> = {
   team_leave: () => null, // Special handling
   team_option: () => null, // Special handling
   data_get: () => null, // Special handling (returns value from NBT)
+  set_new: () => null, // Special handling (returns set ID)
+  set_add: () => null, // Special handling
+  set_contains: () => null, // Special handling (returns 1/0)
+  set_remove: () => null, // Special handling
+  set_clear: () => null, // Special handling
 }
 
 export interface Warning {
   message: string
   code: string
+  line?: number
+  col?: number
+}
+
+function getSpan(node: unknown): Span | undefined {
+  return (node as { span?: Span } | undefined)?.span
 }
 
 const NAMESPACED_ENTITY_TYPE_RE = /^[a-z0-9_.-]+:[a-z0-9_./-]+$/
@@ -143,7 +155,8 @@ function emitBlockPos(pos: BlockPosExpr): string {
 export class Lowering {
   private namespace: string
   private functions: IRFunction[] = []
-  private globals: string[] = []
+  private globals: GlobalVar[] = []
+  private globalNames: Map<string, { mutable: boolean }> = new Map()
   private fnDecls: Map<string, FnDecl> = new Map()
   private specializedFunctions: Map<string, string> = new Map()
   private currentFn: string = ''
@@ -174,6 +187,7 @@ export class Lowering {
 
   constructor(namespace: string) {
     this.namespace = namespace
+    LoweringBuilder.resetTempCounter()
   }
 
   lower(program: Program): IRModule {
@@ -199,6 +213,14 @@ export class Lowering {
     for (const constDecl of program.consts ?? []) {
       this.constValues.set(constDecl.name, constDecl.value)
       this.varTypes.set(constDecl.name, this.normalizeType(constDecl.type))
+    }
+
+    // Process global variable declarations (top-level let)
+    for (const g of program.globals ?? []) {
+      this.globalNames.set(g.name, { mutable: g.mutable })
+      this.varTypes.set(g.name, this.normalizeType(g.type))
+      const initValue = g.init.kind === 'int_lit' ? g.init.value : 0
+      this.globals.push({ name: `$${g.name}`, init: initValue })
     }
 
     for (const fn of program.declarations) {
@@ -328,7 +350,7 @@ export class Lowering {
   private wrapWithTickRate(fn: IRFunction, rate: number): void {
     // Add tick counter logic to entry block
     const counterVar = `$__tick_${fn.name}`
-    this.globals.push(counterVar)
+    this.globals.push({ name: counterVar, init: 0 })
 
     // Prepend counter logic to entry block
     const entry = fn.blocks[0]
@@ -407,6 +429,9 @@ export class Lowering {
       case 'foreach':
         this.lowerForeachStmt(stmt)
         break
+      case 'for_range':
+        this.lowerForRangeStmt(stmt)
+        break
       case 'match':
         this.lowerMatchStmt(stmt)
         break
@@ -478,6 +503,14 @@ export class Lowering {
           this.builder.emitRaw(`execute store result storage rs:heap ${stmt.name}[-1] int 1 run scoreboard players get ${elemValue.name} rs`)
         }
       }
+      return
+    }
+
+    // Handle set_new returning a set ID string
+    if (stmt.init.kind === 'call' && stmt.init.fn === 'set_new') {
+      const setId = `__set_${this.foreachCounter++}`
+      this.builder.emitRaw(`data modify storage rs:sets ${setId} set value []`)
+      this.stringValues.set(stmt.name, setId)
       return
     }
 
@@ -602,6 +635,60 @@ export class Lowering {
 
     // Exit block
     this.builder.startBlock(exitLabel)
+  }
+
+  private lowerForRangeStmt(stmt: Extract<Stmt, { kind: 'for_range' }>): void {
+    const loopVar = `$${stmt.varName}`
+    const subFnName = `${this.currentFn}/__for_${this.foreachCounter++}`
+
+    // Initialize loop variable
+    this.varMap.set(stmt.varName, loopVar)
+    const startVal = this.lowerExpr(stmt.start)
+    if (startVal.kind === 'const') {
+      this.builder.emitRaw(`scoreboard players set ${loopVar} rs ${startVal.value}`)
+    } else if (startVal.kind === 'var') {
+      this.builder.emitRaw(`scoreboard players operation ${loopVar} rs = ${startVal.name} rs`)
+    }
+
+    // Call loop function
+    this.builder.emitRaw(`function ${this.namespace}:${subFnName}`)
+
+    // Generate loop sub-function
+    const savedBuilder = this.builder
+    const savedVarMap = new Map(this.varMap)
+    const savedContext = this.currentContext
+    const savedBlockPosVars = new Map(this.blockPosVars)
+
+    this.builder = new LoweringBuilder()
+    this.varMap = new Map(savedVarMap)
+    this.currentContext = savedContext
+    this.blockPosVars = new Map(savedBlockPosVars)
+
+    this.builder.startBlock('entry')
+
+    // Body
+    this.lowerBlock(stmt.body)
+
+    // Increment
+    this.builder.emitRaw(`scoreboard players add ${loopVar} rs 1`)
+
+    // Loop condition: execute if score matches ..<end-1> run function
+    const endVal = this.lowerExpr(stmt.end)
+    const endNum = endVal.kind === 'const' ? endVal.value - 1 : '?'
+    this.builder.emitRaw(`execute if score ${loopVar} rs matches ..${endNum} run function ${this.namespace}:${subFnName}`)
+
+    if (!this.builder.isBlockSealed()) {
+      this.builder.emitReturn()
+    }
+
+    const subFn = this.builder.build(subFnName, [], false)
+    this.functions.push(subFn)
+
+    // Restore
+    this.builder = savedBuilder
+    this.varMap = savedVarMap
+    this.currentContext = savedContext
+    this.blockPosVars = savedBlockPosVars
   }
 
   private lowerForeachStmt(stmt: Extract<Stmt, { kind: 'foreach' }>): void {
@@ -915,12 +1002,28 @@ export class Lowering {
         // Float stored as fixed-point × 1000
         return { kind: 'const', value: Math.round(expr.value * 1000) }
 
+      case 'byte_lit':
+        return { kind: 'const', value: expr.value }
+
+      case 'short_lit':
+        return { kind: 'const', value: expr.value }
+
+      case 'long_lit':
+        return { kind: 'const', value: expr.value }
+
+      case 'double_lit':
+        return { kind: 'const', value: Math.round(expr.value * 1000) }
+
       case 'bool_lit':
         return { kind: 'const', value: expr.value ? 1 : 0 }
 
       case 'str_lit':
         // Strings are handled inline in builtins
         return { kind: 'const', value: 0 } // Placeholder
+
+      case 'mc_name':
+        // MC names (#health, #red) treated as string constants
+        return { kind: 'const', value: 0 } // Handled inline in exprToString
 
       case 'str_interp':
         // Interpolated strings are handled inline in message builtins.
@@ -1185,6 +1288,15 @@ export class Lowering {
   }
 
   private lowerAssignExpr(expr: Extract<Expr, { kind: 'assign' }>): Operand {
+    // Check for const reassignment (both compile-time consts and immutable globals)
+    if (this.constValues.has(expr.target)) {
+      throw new DiagnosticError('LoweringError', `Cannot assign to constant '${expr.target}'`, getSpan(expr) ?? { line: 1, col: 1 })
+    }
+    const globalInfo = this.globalNames.get(expr.target)
+    if (globalInfo && !globalInfo.mutable) {
+      throw new DiagnosticError('LoweringError', `Cannot assign to constant '${expr.target}'`, getSpan(expr) ?? { line: 1, col: 1 })
+    }
+
     const blockPosValue = this.resolveBlockPosExpr(expr.value)
     if (blockPosValue) {
       this.blockPosVars.set(expr.target, blockPosValue)
@@ -1233,7 +1345,7 @@ export class Lowering {
 
     // Check for builtin
     if (expr.fn in BUILTINS) {
-      return this.lowerBuiltinCall(expr.fn, expr.args)
+      return this.lowerBuiltinCall(expr.fn, expr.args, getSpan(expr))
     }
 
     // Handle entity methods: __entity_tag, __entity_untag, __entity_has_tag
@@ -1481,7 +1593,7 @@ export class Lowering {
     }
   }
 
-  private lowerBuiltinCall(name: string, args: Expr[]): Operand {
+  private lowerBuiltinCall(name: string, args: Expr[], callSpan?: Span): Operand {
     const richTextCommand = this.lowerRichTextBuiltin(name, args)
     if (richTextCommand) {
       this.builder.emitRaw(richTextCommand)
@@ -1660,6 +1772,43 @@ export class Lowering {
       return { kind: 'var', name: dst }
     }
 
+    // Set data structure operations — unique collections via NBT storage
+    // set_new is primarily handled in lowerLetStmt for proper string tracking.
+    // This fallback handles standalone set_new() calls without assignment.
+    if (name === 'set_new') {
+      const setId = `__set_${this.foreachCounter++}`
+      this.builder.emitRaw(`data modify storage rs:sets ${setId} set value []`)
+      return { kind: 'const', value: 0 }
+    }
+
+    if (name === 'set_add') {
+      const setId = this.exprToString(args[0])
+      const value = this.exprToString(args[1])
+      this.builder.emitRaw(`execute unless data storage rs:sets ${setId}[{value:${value}}] run data modify storage rs:sets ${setId} append value {value:${value}}`)
+      return { kind: 'const', value: 0 }
+    }
+
+    if (name === 'set_contains') {
+      const dst = this.builder.freshTemp()
+      const setId = this.exprToString(args[0])
+      const value = this.exprToString(args[1])
+      this.builder.emitRaw(`execute store result score ${dst} rs if data storage rs:sets ${setId}[{value:${value}}]`)
+      return { kind: 'var', name: dst }
+    }
+
+    if (name === 'set_remove') {
+      const setId = this.exprToString(args[0])
+      const value = this.exprToString(args[1])
+      this.builder.emitRaw(`data remove storage rs:sets ${setId}[{value:${value}}]`)
+      return { kind: 'const', value: 0 }
+    }
+
+    if (name === 'set_clear') {
+      const setId = this.exprToString(args[0])
+      this.builder.emitRaw(`data modify storage rs:sets ${setId} set value []`)
+      return { kind: 'const', value: 0 }
+    }
+
     const coordCommand = this.lowerCoordinateBuiltin(name, args)
     if (coordCommand) {
       this.builder.emitRaw(coordCommand)
@@ -1670,6 +1819,7 @@ export class Lowering {
       this.warnings.push({
         message: 'tp_to is deprecated; use tp instead',
         code: 'W_DEPRECATED',
+        ...(callSpan ? { line: callSpan.line, col: callSpan.col } : {}),
       })
       const tpCommand = this.lowerTpCommand(args)
       if (tpCommand) {
@@ -1686,8 +1836,12 @@ export class Lowering {
       return { kind: 'const', value: 0 }
     }
 
-    // Convert args to strings for builtin
-    const strArgs = args.map(arg => this.exprToString(arg))
+    // Convert args to strings for builtin (use SNBT for struct/array literals)
+    const strArgs = args.map(arg =>
+      arg.kind === 'struct_lit' || arg.kind === 'array_lit'
+        ? this.exprToSnbt(arg)
+        : this.exprToString(arg)
+    )
     const cmd = BUILTINS[name](strArgs)
     if (cmd) {
       this.builder.emitRaw(cmd)
@@ -1822,10 +1976,20 @@ export class Lowering {
         return expr.value.toString()
       case 'float_lit':
         return Math.trunc(expr.value).toString()
+      case 'byte_lit':
+        return `${expr.value}b`
+      case 'short_lit':
+        return `${expr.value}s`
+      case 'long_lit':
+        return `${expr.value}L`
+      case 'double_lit':
+        return `${expr.value}d`
       case 'bool_lit':
         return expr.value ? '1' : '0'
       case 'str_lit':
         return expr.value
+      case 'mc_name':
+        return expr.value   // #health → "health" (no quotes, used as bare MC name)
       case 'str_interp':
         return this.buildRichTextJson(expr)
       case 'blockpos':
@@ -1851,15 +2015,48 @@ export class Lowering {
     }
   }
 
+  private exprToSnbt(expr: Expr): string {
+    switch (expr.kind) {
+      case 'struct_lit': {
+        const entries = expr.fields.map(f => `${f.name}:${this.exprToSnbt(f.value)}`)
+        return `{${entries.join(',')}}`
+      }
+      case 'array_lit': {
+        const items = expr.elements.map(e => this.exprToSnbt(e))
+        return `[${items.join(',')}]`
+      }
+      case 'str_lit':
+        return `"${expr.value}"`
+      case 'int_lit':
+        return String(expr.value)
+      case 'float_lit':
+        return String(expr.value)
+      case 'byte_lit':
+        return `${expr.value}b`
+      case 'short_lit':
+        return `${expr.value}s`
+      case 'long_lit':
+        return `${expr.value}L`
+      case 'double_lit':
+        return `${expr.value}d`
+      case 'bool_lit':
+        return expr.value ? '1b' : '0b'
+      default:
+        return this.exprToString(expr)
+    }
+  }
+
   private exprToTargetString(expr: Expr): string {
     if (expr.kind === 'selector') {
       return this.selectorToString(expr.sel)
     }
 
     if (expr.kind === 'str_lit' && expr.value.startsWith('@')) {
+      const span = getSpan(expr)
       this.warnings.push({
         message: `Quoted selector "${expr.value}" is deprecated; pass ${expr.value} without quotes`,
         code: 'W_QUOTED_SELECTOR',
+        ...(span ? { line: span.line, col: span.col } : {}),
       })
       return expr.value
     }
@@ -1914,6 +2111,14 @@ export class Lowering {
     if (name === 'clone') {
       if (args.length === 3 && pos0 && pos1 && pos2) {
         return `clone ${emitBlockPos(pos0)} ${emitBlockPos(pos1)} ${emitBlockPos(pos2)}`
+      }
+      return null
+    }
+
+    if (name === 'summon') {
+      if (args.length >= 2 && pos1) {
+        const nbt = args[2] ? ` ${this.exprToString(args[2])}` : ''
+        return `summon ${this.exprToString(args[0])} ${emitBlockPos(pos1)}${nbt}`
       }
       return null
     }
@@ -2186,14 +2391,19 @@ export class Lowering {
 // ---------------------------------------------------------------------------
 
 class LoweringBuilder {
-  private tempCount = 0
+  private static globalTempId = 0
   private labelCount = 0
   private blocks: any[] = []
   private currentBlock: any = null
   private locals = new Set<string>()
 
+  /** Reset the global temp counter (call between compilations). */
+  static resetTempCounter(): void {
+    LoweringBuilder.globalTempId = 0
+  }
+
   freshTemp(): string {
-    const name = `$t${this.tempCount++}`
+    const name = `$_${LoweringBuilder.globalTempId++}`
     this.locals.add(name)
     return name
   }

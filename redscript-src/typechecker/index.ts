@@ -32,10 +32,10 @@ export class TypeChecker {
   }
 
   private getNodeLocation(node: unknown): { line: number; col: number } {
-    const loc = (node as { loc?: { line: number; col: number } } | undefined)?.loc
+    const span = (node as { span?: { line: number; col: number } } | undefined)?.span
     return {
-      line: loc?.line ?? 1,
-      col: loc?.col ?? 1,
+      line: span?.line ?? 1,
+      col: span?.col ?? 1,
     }
   }
 
@@ -336,8 +336,13 @@ export class TypeChecker {
       case 'float_lit':
       case 'bool_lit':
       case 'str_lit':
+      case 'mc_name':
       case 'range_lit':
       case 'selector':
+      case 'byte_lit':
+      case 'short_lit':
+      case 'long_lit':
+      case 'double_lit':
         break
     }
   }
@@ -480,7 +485,7 @@ export class TypeChecker {
           // Entity marker (void) - allow all members
           if (varType.name !== 'void') {
             // Only warn for primitive types
-            if (['int', 'bool', 'float', 'string'].includes(varType.name)) {
+            if (['int', 'bool', 'float', 'string', 'byte', 'short', 'long', 'double'].includes(varType.name)) {
               this.report(
                 `Cannot access member '${expr.field}' on ${this.typeToString(varType)}`,
                 expr
@@ -545,9 +550,18 @@ export class TypeChecker {
         return { kind: 'named', name: 'int' }
       case 'float_lit':
         return { kind: 'named', name: 'float' }
+      case 'byte_lit':
+        return { kind: 'named', name: 'byte' }
+      case 'short_lit':
+        return { kind: 'named', name: 'short' }
+      case 'long_lit':
+        return { kind: 'named', name: 'long' }
+      case 'double_lit':
+        return { kind: 'named', name: 'double' }
       case 'bool_lit':
         return { kind: 'named', name: 'bool' }
       case 'str_lit':
+      case 'mc_name':
         return { kind: 'named', name: 'string' }
       case 'str_interp':
         for (const part of expr.parts) {
