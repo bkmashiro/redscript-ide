@@ -582,7 +582,6 @@ require(['vs/editor/editor.main'], function() {
     const key = e.target.value
     if (key && EXAMPLES[key]) {
       editor.setValue(EXAMPLES[key])
-      e.target.value = ''
     }
   })
 
