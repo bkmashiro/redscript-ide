@@ -387,7 +387,7 @@ require(['vs/editor/editor.main'], function() {
         [/[~^]-?\d*(\.\d+)?/, 'constant.blockpos'],
         [/\b\d+(\.\d+)?\b/, 'number'],
         [/\b(fn)\s+([a-z_]\w*)/, ['keyword', 'entity.name.function']],
-        [{ cases: { '@builtins': 'support.function', '@keywords': 'keyword', '@default': 'identifier' } }, ''],
+        [/[a-zA-Z_]\w*/, { cases: { '@builtins': 'support.function', '@keywords': 'keyword', '@default': 'identifier' } }],
         [/[{}()\[\]]/, 'delimiter'],
         [/[;,:]/, 'delimiter'],
         [/->|::|\.\.|[+\-*/%=<>!&|]+/, 'operator'],
