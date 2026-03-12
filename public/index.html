@@ -83,16 +83,27 @@
     #compile-btn:hover { opacity: .85; }
     #compile-btn.loading { opacity: .6; cursor: default; }
 
-    #github-star {
+    #docs-link, #github-star {
       background: transparent;
-      color: var(--yellow);
-      border: 1px solid var(--yellow);
+      border: 1px solid var(--border);
       border-radius: 6px;
       padding: 6px 12px;
       font-size: 12px;
       font-weight: 600;
       text-decoration: none;
       transition: all .15s;
+    }
+    #docs-link {
+      color: var(--accent2);
+      border-color: var(--accent2);
+    }
+    #docs-link:hover {
+      background: var(--accent2);
+      color: #11111b;
+    }
+    #github-star {
+      color: var(--yellow);
+      border-color: var(--yellow);
     }
     #github-star:hover {
       background: var(--yellow);
@@ -234,8 +245,12 @@
     Compile
   </button>
 
+  <a id="docs-link" href="https://redscript-docs.pages.dev" target="_blank">
+    📖 Docs
+  </a>
+
   <a id="github-star" href="https://github.com/bkmashiro/redscript" target="_blank">
-    ⭐ Star on GitHub
+    ⭐ Star
   </a>
 </div>
 
