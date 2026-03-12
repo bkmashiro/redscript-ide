@@ -266,35 +266,28 @@ fn every_second() {
 }
 `,
   pvp: `// PVP game timer
-import "stdlib/player.rs"
-
 const GAME_TIME: int = 300;
+let timer: int = 0;
 
 @tick(rate=20)
 fn tick_game() {
-    let time: int = scoreboard_get("#game", "timer");
-    if (time <= 0) {
+    if (timer <= 0) {
         end_game();
         return;
     }
-    scoreboard_set("#game", "timer", time - 1);
-    actionbar(@a, "⏱ \${time}s remaining");
+    timer = timer - 1;
+    actionbar(@a, "Time: \${timer}s");
 }
 
 fn start_game() {
-    scoreboard_set("#game", "timer", GAME_TIME);
-    title(@a, "Fight!", "Game started");
+    timer = GAME_TIME;
+    title(@a, "Fight!");
     tp(@a, (0, 64, 0));
 }
 
 fn end_game() {
     title(@a, "Game Over!");
-    announce("Thanks for playing!");
-}
-
-@on_death
-fn on_kill() {
-    scoreboard_add(@s, "kills", 1);
+    say("Thanks for playing!");
 }
 `,
   shop: `// Item shop
@@ -321,44 +314,48 @@ fn buy_diamond() {
 }
 `,
   lambda: `// Lambda and higher-order functions
-fn apply(f: (int) -> int, x: int) -> int {
-    return f(x);
-}
-
-fn apply_twice(f: (int) -> int, x: int) -> int {
-    return apply(f, apply(f, x));
+fn apply(val: int, f: (int) -> int) -> int {
+    return f(val);
 }
 
 fn run_demo() {
-    let double = (x: int) -> int { return x * 2; };
-    let add_ten = (x: int) -> int { return x + 10; };
-
-    let result: int = apply_twice(double, 5); // 20
-    scoreboard_set("#demo", "result", result);
-    announce("Result: \${result}");
+    // Lambda syntax: (params) => expr
+    let doubled = apply(5, (x: int) => x * 2);
+    let added = apply(10, (x: int) => x + 5);
+    
+    scoreboard_set(@s, #doubled, doubled);
+    scoreboard_set(@s, #added, added);
+    say("Doubled: \${doubled}, Added: \${added}");
 }
 `,
   structs: `// Structs and enums
 enum Phase { Lobby, Playing, Ended }
 
-struct Player {
+struct PlayerData {
     score: int,
-    alive: bool,
+    kills: int
 }
 
 fn check_phase(phase: Phase) {
     match (phase) {
-        Phase::Lobby   => { announce("Waiting for players..."); }
-        Phase::Playing => { announce("Game in progress!"); }
-        Phase::Ended   => { announce("Game over!"); }
+        Phase.Lobby   => { say("Waiting for players..."); }
+        Phase.Playing => { say("Game in progress!"); }
+        Phase.Ended   => { say("Game over!"); }
+        _ => { say("Unknown phase"); }
     }
 }
 
+fn create_player() {
+    let data: PlayerData = { score: 0, kills: 0 };
+    scoreboard_set(@s, #score, data.score);
+    scoreboard_set(@s, #kills, data.kills);
+}
+
 fn award_winner() {
-    let top: int = scoreboard_get(@e[sort=furthest, limit=1], "score");
+    let top = scoreboard_get(@a[sort=nearest,limit=1], #score);
     if (top > 0) {
-        give(@e[sort=furthest, limit=1], "minecraft:diamond", 5);
-        title(@a, "Winner!", "Congratulations!");
+        give(@a[sort=nearest,limit=1], "minecraft:diamond", 5);
+        title(@a, "Winner!");
     }
 }
 `
