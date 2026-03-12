@@ -83,6 +83,22 @@
     #compile-btn:hover { opacity: .85; }
     #compile-btn.loading { opacity: .6; cursor: default; }
 
+    #github-star {
+      background: transparent;
+      color: var(--yellow);
+      border: 1px solid var(--yellow);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all .15s;
+    }
+    #github-star:hover {
+      background: var(--yellow);
+      color: #11111b;
+    }
+
     #status-badge {
       font-size: 12px;
       padding: 3px 8px;
@@ -217,6 +233,10 @@
     <span class="btn-icon">▶</span>
     Compile
   </button>
+
+  <a id="github-star" href="https://github.com/bkmashiro/redscript" target="_blank">
+    ⭐ Star on GitHub
+  </a>
 </div>
 
 <!-- Split pane -->
