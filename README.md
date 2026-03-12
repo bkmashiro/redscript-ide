@@ -1,59 +1,61 @@
 # RedScript IDE
 
-**在线编辑器** — 在浏览器中编写 RedScript 并实时预览生成的 Minecraft 数据包。
+**Online Editor** — Write RedScript in your browser and preview generated Minecraft datapacks in real-time.
 
-🔗 **[立即试用 → redscript-ide.pages.dev](https://redscript-ide.pages.dev)**
+🔗 **[Try it now → redscript-ide.pages.dev](https://redscript-ide.pages.dev)**
 
-![RedScript IDE Screenshot](https://img.shields.io/badge/RedScript-IDE-red?style=for-the-badge&logo=minecraft&logoColor=white)
+[中文版](./README.zh.md)
 
-## 功能
+![RedScript IDE](https://img.shields.io/badge/RedScript-IDE-red?style=for-the-badge&logo=minecraft&logoColor=white)
 
-- ✨ **实时编译** — 输入即编译，无需手动触发
-- 🎨 **语法高亮** — 支持 RedScript 和 mcfunction
-- 📦 **多文件预览** — 查看生成的所有 .mcfunction 文件
-- 🚀 **零配置** — 打开即用，无需安装
+## Features
 
-## 示例
+- ✨ **Live Compilation** — Code compiles as you type
+- 🎨 **Syntax Highlighting** — Full support for RedScript and mcfunction
+- 📦 **Multi-file Preview** — View all generated .mcfunction files
+- 🚀 **Zero Setup** — Just open and start coding
 
-内置多个示例：
+## Examples
 
-| 示例 | 描述 |
-|------|------|
-| Counter | 简单计时器 |
-| PVP Timer | PVP 游戏倒计时 |
-| Shop | 商店系统 |
-| Lambda | Lambda 和高阶函数 |
-| Structs & Enums | 结构体和枚举 |
+Built-in examples to get you started:
 
-## 技术栈
+| Example | Description |
+|---------|-------------|
+| Counter | Simple tick counter |
+| PVP Timer | PVP game countdown |
+| Shop | Item shop system |
+| Lambda | Lambda and higher-order functions |
+| Structs & Enums | Structs and enums |
 
-- [Monaco Editor](https://microsoft.github.io/monaco-editor/) — VS Code 同款编辑器
-- [esbuild](https://esbuild.github.io/) — 打包 RedScript 编译器
-- [Cloudflare Pages](https://pages.cloudflare.com/) — 静态托管
+## Tech Stack
 
-## 本地开发
+- [Monaco Editor](https://microsoft.github.io/monaco-editor/) — The editor that powers VS Code
+- [esbuild](https://esbuild.github.io/) — Bundling the RedScript compiler
+- [Cloudflare Pages](https://pages.cloudflare.com/) — Static hosting
+
+## Local Development
 
 ```bash
-# 克隆仓库
+# Clone the repo
 git clone https://github.com/bkmashiro/redscript-ide.git
 cd redscript-ide
 
-# 安装依赖
+# Install dependencies
 npm install
 
-# 启动开发服务器
+# Start dev server
 npm run dev
-# 访问 http://localhost:3000
+# Visit http://localhost:3000
 
-# 部署到 Cloudflare Pages
+# Deploy to Cloudflare Pages
 npm run deploy
 ```
 
-## 相关项目
+## Related Projects
 
-- [RedScript](https://github.com/bkmashiro/redscript) — RedScript 编译器
-- [RedScript VSCode](https://marketplace.visualstudio.com/items?itemName=bkmashiro.redscript-vscode) — VSCode 扩展
+- [RedScript](https://github.com/bkmashiro/redscript) — The RedScript compiler
+- [RedScript VSCode](https://marketplace.visualstudio.com/items?itemName=bkmashiro.redscript-vscode) — VSCode extension
 
-## 许可证
+## License
 
 MIT
