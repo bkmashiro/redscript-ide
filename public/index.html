@@ -386,7 +386,7 @@ require(['vs/editor/editor.main'], function() {
         [/\b[A-Z][A-Za-z0-9]*\b/, 'type'],
         [/[~^]-?\d*(\.\d+)?/, 'constant.blockpos'],
         [/\b\d+(\.\d+)?\b/, 'number'],
-        [/\b(fn)\s+([a-z_]\w*)/, ['keyword', 'entity.name.function']],
+        [/\bfn\b/, 'keyword'],
         [/[a-zA-Z_]\w*/, { cases: { '@builtins': 'support.function', '@keywords': 'keyword', '@default': 'identifier' } }],
         [/[{}()\[\]]/, 'delimiter'],
         [/[;,:]/, 'delimiter'],
