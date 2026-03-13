@@ -1,0 +1,42 @@
+name: Update Compiler & Redeploy
+
+# Triggered by redscript core repo when a new version is published
+on:
+  repository_dispatch:
+    types: [redscript-updated]
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Update redscript-mc to latest
+        run: |
+          npm install redscript-mc@latest --save
+          NEW_VERSION=$(node -e "console.log(require('./node_modules/redscript-mc/package.json').version)")
+          echo "Updated redscript-mc to v$NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
+
+      - name: Build
+        run: node build.mjs
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: pages deploy public --project-name redscript-ide
+
+      - name: Commit package.json update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: update redscript-mc to v${{ env.new_version }} [skip ci]" || echo "Nothing to commit"
+          git push
