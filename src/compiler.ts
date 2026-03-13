@@ -20,5 +20,8 @@ export function compileRedScript(source: string): CompileResult {
   }
 }
 
+// Export version for external access
+export { version }
+
 // Expose on window for Monaco worker usage
 ;(globalThis as unknown as Record<string, unknown>).RedScriptCompiler = { compileRedScript, version }
