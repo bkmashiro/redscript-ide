@@ -230,6 +230,7 @@
 
   <select id="example-select">
     <option value="">— Examples —</option>
+    <option value="particle">Particle Demo</option>
     <option value="counter">Counter</option>
     <option value="pvp">PVP Timer</option>
     <option value="shop">Shop</option>
@@ -292,6 +293,37 @@
 
 <script>
 const EXAMPLES = {
+  particle: `// ===== Simple Particle Demo =====
+// 展示: @tick, 状态管理, f-strings, foreach at
+
+let counter: int = 0;
+let running: bool = false;
+
+@tick fn demo_tick() {
+    if (!running) { return; }
+    counter = counter + 1;
+    
+    // 在每个玩家位置生成粒子
+    foreach (p in @a) at @s {
+        particle("minecraft:end_rod", ~0, ~1, ~0, 0.5, 0.5, 0.5, 0.1, 5);
+    }
+    
+    if (counter % 20 == 0) {
+        say(f"Running for {counter} ticks");
+    }
+}
+
+@keep fn start() {
+    running = true;
+    counter = 0;
+    say(f"Demo started!");
+}
+
+@keep fn stop() {
+    running = false;
+    say(f"Demo stopped at {counter} ticks.");
+}
+`,
   counter: `// Simple tick counter
 let count: int = 0;
 
