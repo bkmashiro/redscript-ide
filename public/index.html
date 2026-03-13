@@ -280,7 +280,7 @@
       <span>Functions: <b id="stat-fns">—</b></span>
       <span>Files: <b id="stat-files">—</b></span>
       <span>Warnings: <b id="stat-warns">—</b></span>
-      <span style="margin-left: auto;"><b id="version-badge" style="color: var(--accent2);"></b></span>
+      <span id="version-span" style="margin-left: auto; color: var(--accent2);"></span>
     </div>
   </div>
 
@@ -290,6 +290,10 @@
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
 <!-- Bundled compiler -->
 <script src="./compiler.js"></script>
+<script>
+  // Set version immediately after compiler loads
+  document.getElementById('version-span').textContent = 'v' + (RedScriptCompiler.version || '?')
+</script>
 
 <script>
 const EXAMPLES = {
@@ -433,12 +437,6 @@ fn award_winner() {
 require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' } })
 
 require(['vs/editor/editor.main'], function() {
-  // Display compiler version
-  const versionBadge = document.getElementById('version-badge')
-  if (versionBadge && RedScriptCompiler.version) {
-    versionBadge.textContent = 'v' + RedScriptCompiler.version
-  }
-
   // Register RedScript language
   monaco.languages.register({ id: 'redscript', extensions: ['.rs'] })
   monaco.languages.setMonarchTokensProvider('redscript', {
