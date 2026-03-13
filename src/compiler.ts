@@ -1,6 +1,6 @@
 // Browser-side compiler entry point
 // esbuild bundles this + the entire redscript compiler into public/compiler.js
-import { compile } from '../redscript-src/index'
+import { compile } from 'redscript-mc'
 
 export type CompileResult = {
   ok: true
