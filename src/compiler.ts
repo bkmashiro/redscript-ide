@@ -1,6 +1,6 @@
 // Browser-side compiler entry point
 // esbuild bundles this + the entire redscript compiler into public/compiler.js
-import { compile } from 'redscript-mc'
+import { compile, version } from 'redscript-mc'
 
 export type CompileResult = {
   ok: true
@@ -21,4 +21,4 @@ export function compileRedScript(source: string): CompileResult {
 }
 
 // Expose on window for Monaco worker usage
-;(globalThis as unknown as Record<string, unknown>).RedScriptCompiler = { compileRedScript }
+;(globalThis as unknown as Record<string, unknown>).RedScriptCompiler = { compileRedScript, version }

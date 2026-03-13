@@ -238,6 +238,7 @@
   </select>
 
   <div class="sep"></div>
+  <span id="version-badge" style="color: var(--subtext); font-size: 12px;"></span>
   <span id="status-badge">ready</span>
 
   <button id="compile-btn">
@@ -400,6 +401,12 @@ fn award_winner() {
 require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' } })
 
 require(['vs/editor/editor.main'], function() {
+  // Display compiler version
+  const versionBadge = document.getElementById('version-badge')
+  if (versionBadge && RedScriptCompiler.version) {
+    versionBadge.textContent = 'v' + RedScriptCompiler.version
+  }
+
   // Register RedScript language
   monaco.languages.register({ id: 'redscript', extensions: ['.rs'] })
   monaco.languages.setMonarchTokensProvider('redscript', {
