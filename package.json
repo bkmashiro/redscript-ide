@@ -8,7 +8,8 @@
     "deploy": "node build.mjs && npx wrangler pages deploy public --project-name redscript-ide"
   },
   "dependencies": {
-    "redscript-mc": "latest"
+    "redscript-mc": "^1.2.25",
+    "wrangler": "^3.90.0"
   },
   "devDependencies": {
     "esbuild": "^0.20.0"
