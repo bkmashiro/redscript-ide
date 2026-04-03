@@ -334,7 +334,7 @@ let count: int = 0;
 @tick(rate=20)
 fn every_second() {
     count = count + 1;
-    actionbar(@a, "Time: \${count}s");
+    actionbar(@a, f"Time: {count}s");
 }
 `,
   pvp: `// PVP game timer
@@ -348,7 +348,7 @@ fn tick_game() {
         return;
     }
     timer = timer - 1;
-    actionbar(@a, "Time: \${timer}s");
+    actionbar(@a, f"Time: {timer}s");
 }
 
 fn start_game() {
