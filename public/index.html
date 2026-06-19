@@ -270,8 +270,7 @@
   <!-- Right: output -->
   <div class="pane">
     <div id="output-tabs">
-      <div class="tab active" data-tab="output">mcfunction output</div>
-      <div class="tab" data-tab="files">all files</div>
+      <div class="tab active" data-tab="files">all files</div>
     </div>
     <div class="editor-wrap" id="output-container"></div>
     <div id="error-panel"></div>
@@ -313,19 +312,19 @@ let running: bool = false;
     }
     
     if (counter % 20 == 0) {
-        say(f"Running for {counter} ticks");
+        say("Running for \${counter} ticks");
     }
 }
 
 @keep fn start() {
     running = true;
     counter = 0;
-    say(f"Demo started!");
+    say("Demo started!");
 }
 
 @keep fn stop() {
     running = false;
-    say(f"Demo stopped at {counter} ticks.");
+    say("Demo stopped at \${counter} ticks.");
 }
 `,
   counter: `// Simple tick counter
@@ -334,7 +333,7 @@ let count: int = 0;
 @tick(rate=20)
 fn every_second() {
     count = count + 1;
-    actionbar(@a, f"Time: {count}s");
+    actionbar(@a, "Time: \${count}s");
 }
 `,
   pvp: `// PVP game timer
@@ -348,7 +347,7 @@ fn tick_game() {
         return;
     }
     timer = timer - 1;
-    actionbar(@a, f"Time: {timer}s");
+    actionbar(@a, "Time: \${timer}s");
 }
 
 fn start_game() {
@@ -590,17 +589,9 @@ require(['vs/editor/editor.main'], function() {
   }
 
   function renderOutput() {
-    const activeTab = document.querySelector('.tab.active')?.dataset.tab
-    if (activeTab === 'files') {
-      output.setValue(
-        allFiles.map(f => `// ── ${f.path} ──\n${f.content}`).join('\n\n')
-      )
-    } else {
-      // Show the first .mcfunction file
-      const fn = allFiles.find(f => f.path.endsWith('.mcfunction'))
-        || allFiles.find(f => f.content.trim())
-      output.setValue(fn ? fn.content : '# (no output)')
-    }
+    output.setValue(
+      allFiles.map(f => `// ── ${f.path} ──\n${f.content}`).join('\n\n')
+    )
   }
 
   function clearStats() {
